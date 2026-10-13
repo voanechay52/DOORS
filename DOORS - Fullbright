@@ -1,0 +1,223 @@
+-- Нажми клавишу "L", чтобы включить/выключить свет.
+--
+-- Code by voanechay
+-- ds: voanechay_
+-- tg: voanechay
+--
+
+local Lighting = game:GetService("Lighting")
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+
+local LocalPlayer = Players.LocalPlayer
+local toggleKey = Enum.KeyCode.L
+
+local isLightOn = false
+local lightPart = nil
+local pointLight = nil
+
+local notifyGui = Instance.new("ScreenGui")
+notifyGui.Name = "LightNotify"
+notifyGui.ResetOnSpawn = false
+notifyGui.IgnoreGuiInset = true
+notifyGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+notifyGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+local activeNotification = nil
+
+local function showNotification(title, subtitle, accentColor)
+    if activeNotification then
+        activeNotification:Destroy()
+        activeNotification = nil
+    end
+
+    local frame = Instance.new("Frame")
+    frame.Name = "Notify"
+    frame.AnchorPoint = Vector2.new(0.5, 0)
+    frame.Position = UDim2.new(0.5, 0, 0, -80)
+    frame.Size = UDim2.new(0, 300, 0, 60)
+    frame.BackgroundColor3 = Color3.fromRGB(22, 22, 28)
+    frame.BackgroundTransparency = 0.05
+    frame.BorderSizePixel = 0
+    frame.Parent = notifyGui
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 10)
+    corner.Parent = frame
+
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = accentColor
+    stroke.Thickness = 1
+    stroke.Transparency = 0.5
+    stroke.Parent = frame
+
+    local dot = Instance.new("Frame")
+    dot.Name = "Dot"
+    dot.BackgroundColor3 = accentColor
+    dot.BorderSizePixel = 0
+    dot.Size = UDim2.new(0, 8, 0, 8)
+    dot.Position = UDim2.new(0, 18, 0.5, -4)
+    dot.Parent = frame
+
+    local dotCorner = Instance.new("UICorner")
+    dotCorner.CornerRadius = UDim.new(1, 0)
+    dotCorner.Parent = dot
+
+    local titleLabel = Instance.new("TextLabel")
+    titleLabel.BackgroundTransparency = 1
+    titleLabel.Position = UDim2.new(0, 38, 0, 12)
+    titleLabel.Size = UDim2.new(1, -50, 0, 20)
+    titleLabel.Font = Enum.Font.GothamBold
+    titleLabel.Text = title
+    titleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    titleLabel.TextSize = 15
+    titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+    titleLabel.Parent = frame
+
+    local subtitleLabel = Instance.new("TextLabel")
+    subtitleLabel.BackgroundTransparency = 1
+    subtitleLabel.Position = UDim2.new(0, 38, 0, 32)
+    subtitleLabel.Size = UDim2.new(1, -50, 0, 16)
+    subtitleLabel.Font = Enum.Font.Gotham
+    subtitleLabel.Text = subtitle
+    subtitleLabel.TextColor3 = Color3.fromRGB(160, 160, 170)
+    subtitleLabel.TextSize = 12
+    subtitleLabel.TextXAlignment = Enum.TextXAlignment.Left
+    subtitleLabel.Parent = frame
+
+    activeNotification = frame
+
+    local slideIn = TweenService:Create(frame, TweenInfo.new(0.45, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
+        Position = UDim2.new(0.5, 0, 0, 20)
+    })
+    slideIn:Play()
+
+    task.delay(2.5, function()
+        if not frame.Parent then return end
+        local slideOut = TweenService:Create(frame, TweenInfo.new(0.35, Enum.EasingStyle.Quint, Enum.EasingDirection.In), {
+            Position = UDim2.new(0.5, 0, 0, -80)
+        })
+        slideOut:Play()
+        slideOut.Completed:Connect(function()
+            if frame then frame:Destroy() end
+            if activeNotification == frame then
+                activeNotification = nil
+            end
+        end)
+    end)
+end
+
+local originalProps = {
+    Ambient = Lighting.Ambient,
+    OutdoorAmbient = Lighting.OutdoorAmbient,
+    Brightness = Lighting.Brightness,
+    FogEnd = Lighting.FogEnd,
+    GlobalShadows = Lighting.GlobalShadows
+}
+
+local atmosphere = Lighting:FindFirstChildOfClass("Atmosphere")
+local originalAtmosphereDensity = atmosphere and atmosphere.Density or 0.3
+
+local colorCorrection = Lighting:FindFirstChildOfClass("ColorCorrectionEffect")
+local originalCCBrightness = colorCorrection and colorCorrection.Brightness or 0
+
+local function createPersonalLight()
+    local char = LocalPlayer.Character
+    if not char then return end
+
+    local root = char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Head")
+    if not root then return end
+
+    lightPart = Instance.new("Part")
+    lightPart.Name = "PersonalLightSource"
+    lightPart.Anchored = true
+    lightPart.CanCollide = false
+    lightPart.Transparency = 1
+    lightPart.Size = Vector3.new(1, 1, 1)
+    lightPart.Parent = char
+
+    pointLight = Instance.new("PointLight")
+    pointLight.Brightness = 3
+    pointLight.Range = 120
+    pointLight.Color = Color3.fromRGB(255, 255, 255)
+    pointLight.Shadows = false
+    pointLight.Parent = lightPart
+end
+
+local function toggleLight()
+    isLightOn = not isLightOn
+
+    if isLightOn then
+
+        Lighting.Ambient = Color3.fromRGB(255, 255, 255)
+        Lighting.OutdoorAmbient = Color3.fromRGB(255, 255, 255)
+        Lighting.Brightness = 2
+        Lighting.FogEnd = 100000
+        Lighting.GlobalShadows = false
+
+        if atmosphere then atmosphere.Density = 0 end
+        if colorCorrection then colorCorrection.Brightness = 0 end
+
+        createPersonalLight()
+
+        showNotification(
+            "Свет включён",
+            "Тёмные участки освещены.",
+            Color3.fromRGB(255, 215, 130)
+        )
+    else
+        Lighting.Ambient = originalProps.Ambient
+        Lighting.OutdoorAmbient = originalProps.OutdoorAmbient
+        Lighting.Brightness = originalProps.Brightness
+        Lighting.FogEnd = originalProps.FogEnd
+        Lighting.GlobalShadows = originalProps.GlobalShadows
+
+        if atmosphere then atmosphere.Density = originalAtmosphereDensity end
+        if colorCorrection then colorCorrection.Brightness = originalCCBrightness end
+
+        if lightPart then
+            lightPart:Destroy()
+            lightPart = nil
+            pointLight = nil
+        end
+
+        showNotification(
+            "Свет выключен",
+            "Освещение возвращено в норму.",
+            Color3.fromRGB(140, 180, 230)
+        )
+    end
+end
+
+RunService.RenderStepped:Connect(function()
+    if isLightOn then
+        local char = LocalPlayer.Character
+        if char then
+            local root = char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Head")
+            if root then
+                if not lightPart or not lightPart.Parent then
+                    createPersonalLight()
+                end
+                if lightPart then
+                    lightPart.CFrame = root.CFrame
+                end
+            end
+        end
+    end
+end)
+
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    if input.KeyCode == toggleKey then
+        toggleLight()
+    end
+end)
+
+LocalPlayer.CharacterAdded:Connect(function()
+    if isLightOn then
+        task.wait(0.5)
+        createPersonalLight()
+    end
+end)
