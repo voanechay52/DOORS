@@ -1,3 +1,10 @@
+-- Нажми "V", чтобы скрыть/показать предметы и руки.
+--
+-- Code by voanechay
+-- ds: voanechay_
+-- tg: voanechay
+--
+
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local Players = game:GetService("Players")
