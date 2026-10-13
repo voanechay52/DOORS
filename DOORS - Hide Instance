@@ -1,0 +1,265 @@
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local LocalPlayer = Players.LocalPlayer
+
+local toggleKey = Enum.KeyCode.V
+local isHidden = false
+
+local cachedObjects = {}
+local originalStates = {}
+
+local notifyGui = Instance.new("ScreenGui")
+notifyGui.Name = "HandsNotify"
+notifyGui.ResetOnSpawn = false
+notifyGui.IgnoreGuiInset = true
+notifyGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+notifyGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+local activeNotification = nil
+
+local function showNotification(title, subtitle, accentColor)
+    -- Убираем предыдущее уведомление
+    if activeNotification then
+        activeNotification:Destroy()
+        activeNotification = nil
+    end
+
+    local frame = Instance.new("Frame")
+    frame.Name = "Notify"
+    frame.AnchorPoint = Vector2.new(0.5, 0)
+    frame.Position = UDim2.new(0.5, 0, 0, -80) -- Изначально за краем экрана
+    frame.Size = UDim2.new(0, 300, 0, 60)
+    frame.BackgroundColor3 = Color3.fromRGB(22, 22, 28)
+    frame.BackgroundTransparency = 0.05
+    frame.BorderSizePixel = 0
+    frame.Parent = notifyGui
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 10)
+    corner.Parent = frame
+
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = accentColor
+    stroke.Thickness = 1
+    stroke.Transparency = 0.5
+    stroke.Parent = frame
+
+    local dot = Instance.new("Frame")
+    dot.Name = "Dot"
+    dot.BackgroundColor3 = accentColor
+    dot.BorderSizePixel = 0
+    dot.Size = UDim2.new(0, 8, 0, 8)
+    dot.Position = UDim2.new(0, 18, 0.5, -4)
+    dot.Parent = frame
+
+    local dotCorner = Instance.new("UICorner")
+    dotCorner.CornerRadius = UDim.new(1, 0)
+    dotCorner.Parent = dot
+
+    local titleLabel = Instance.new("TextLabel")
+    titleLabel.BackgroundTransparency = 1
+    titleLabel.Position = UDim2.new(0, 38, 0, 12)
+    titleLabel.Size = UDim2.new(1, -50, 0, 20)
+    titleLabel.Font = Enum.Font.GothamBold
+    titleLabel.Text = title
+    titleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    titleLabel.TextSize = 15
+    titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+    titleLabel.Parent = frame
+
+    local subtitleLabel = Instance.new("TextLabel")
+    subtitleLabel.BackgroundTransparency = 1
+    subtitleLabel.Position = UDim2.new(0, 38, 0, 32)
+    subtitleLabel.Size = UDim2.new(1, -50, 0, 16)
+    subtitleLabel.Font = Enum.Font.Gotham
+    subtitleLabel.Text = subtitle
+    subtitleLabel.TextColor3 = Color3.fromRGB(160, 160, 170)
+    subtitleLabel.TextSize = 12
+    subtitleLabel.TextXAlignment = Enum.TextXAlignment.Left
+    subtitleLabel.Parent = frame
+
+    activeNotification = frame
+
+    local slideIn = TweenService:Create(frame, TweenInfo.new(0.45, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
+        Position = UDim2.new(0.5, 0, 0, 20)
+    })
+    slideIn:Play()
+
+    task.delay(2.5, function()
+        if not frame.Parent then return end
+        local slideOut = TweenService:Create(frame, TweenInfo.new(0.35, Enum.EasingStyle.Quint, Enum.EasingDirection.In), {
+            Position = UDim2.new(0.5, 0, 0, -80)
+        })
+        slideOut:Play()
+        slideOut.Completed:Connect(function()
+            if frame then frame:Destroy() end
+            if activeNotification == frame then
+                activeNotification = nil
+            end
+        end)
+    end)
+end
+
+local function saveState(obj)
+    if not originalStates[obj] then
+        originalStates[obj] = {
+            isPart = obj:IsA("BasePart"),
+            isDecal = obj:IsA("Decal") or obj:IsA("Texture"),
+            isEffect = obj:IsA("ParticleEmitter") or obj:IsA("Trail") or obj:IsA("Beam") or obj:IsA("Light") or obj:IsA("GuiObject"),
+            trans = (obj:IsA("BasePart") or obj:IsA("Decal") or obj:IsA("Texture")) and obj.Transparency or nil,
+            ltm = obj:IsA("BasePart") and obj.LocalTransparencyModifier or nil,
+            enabled = (obj:IsA("ParticleEmitter") or obj:IsA("Trail") or obj:IsA("Beam") or obj:IsA("Light") or obj:IsA("GuiObject")) and obj.Enabled or nil
+        }
+    end
+end
+
+local function applyState(obj, hide)
+    local state = originalStates[obj]
+
+    if hide then
+        if obj:IsA("BasePart") then
+            obj.LocalTransparencyModifier = 1
+            obj.Transparency = 1
+        elseif obj:IsA("Decal") or obj:IsA("Texture") then
+            obj.Transparency = 1
+        elseif obj:IsA("ParticleEmitter") or obj:IsA("Trail") or obj:IsA("Beam") or obj:IsA("Light") or obj:IsA("GuiObject") then
+            obj.Enabled = false
+        end
+    else
+        if state then
+            if state.isPart then
+                obj.LocalTransparencyModifier = state.ltm
+                obj.Transparency = state.trans
+            elseif state.isDecal then
+                obj.Transparency = state.trans
+            elseif state.isEffect then
+                obj.Enabled = state.enabled
+            end
+        else
+            if obj:IsA("BasePart") then
+                obj.LocalTransparencyModifier = 0
+                obj.Transparency = 0
+            elseif obj:IsA("Decal") or obj:IsA("Texture") then
+                obj.Transparency = 0
+            elseif obj:IsA("ParticleEmitter") or obj:IsA("Trail") or obj:IsA("Beam") or obj:IsA("Light") or obj:IsA("GuiObject") then
+                obj.Enabled = true
+            end
+        end
+    end
+end
+
+local function updateCache()
+    cachedObjects = {}
+    local character = LocalPlayer.Character
+    if not character then return end
+
+    for _, part in ipairs(character:GetChildren()) do
+        if part.Name == "Left Arm" or part.Name == "Right Arm" or 
+           part.Name == "LeftHand" or part.Name == "RightHand" or
+           part.Name == "LeftUpperArm" or part.Name == "RightUpperArm" or
+           part.Name == "LeftLowerArm" or part.Name == "RightLowerArm" then
+            table.insert(cachedObjects, part)
+        end
+    end
+
+    local tool = character:FindFirstChildOfClass("Tool")
+    if tool then
+        for _, desc in ipairs(tool:GetDescendants()) do
+            table.insert(cachedObjects, desc)
+        end
+    end
+
+    local camera = workspace.CurrentCamera
+    if camera then
+        for _, child in ipairs(camera:GetChildren()) do
+            if child:IsA("Model") or child:IsA("Tool") or child:IsA("BasePart") then
+                if child:IsA("BasePart") then
+                    table.insert(cachedObjects, child)
+                end
+                for _, desc in ipairs(child:GetDescendants()) do
+                    table.insert(cachedObjects, desc)
+                end
+            end
+        end
+    end
+end
+
+local function toggleVisibility()
+    isHidden = not isHidden
+    
+    if isHidden then
+        table.clear(originalStates)
+        updateCache()
+        for _, obj in ipairs(cachedObjects) do
+            saveState(obj)
+            applyState(obj, true)
+        end
+
+        showNotification(
+            "Руки скрыты",
+            "Нажми V, чтобы вернуть.",
+            Color3.fromRGB(255, 130, 130)
+        )
+    else
+        for _, obj in ipairs(cachedObjects) do
+            applyState(obj, false)
+        end
+        table.clear(originalStates)
+        table.clear(cachedObjects)
+
+        showNotification(
+            "Руки возвращены",
+            "Предметы снова видны.",
+            Color3.fromRGB(140, 225, 160)
+        )
+    end
+end
+
+RunService.RenderStepped:Connect(function()
+    if isHidden then
+        for _, obj in ipairs(cachedObjects) do
+            applyState(obj, true)
+        end
+    end
+end)
+
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    if input.KeyCode == toggleKey then
+        toggleVisibility()
+    end
+end)
+
+local function setupCharacter(char)
+    isHidden = false
+    table.clear(originalStates)
+    table.clear(cachedObjects)
+    updateCache()
+
+    char.ChildAdded:Connect(function(child)
+        if child:IsA("Tool") then updateCache() end
+    end)
+    char.ChildRemoved:Connect(function(child)
+        if child:IsA("Tool") then updateCache() end
+    end)
+
+    local humanoid = char:WaitForChild("Humanoid", 5)
+    if humanoid then
+        humanoid.ToolEquipped:Connect(updateCache)
+    end
+end
+
+LocalPlayer.CharacterAdded:Connect(setupCharacter)
+if LocalPlayer.Character then
+    setupCharacter(LocalPlayer.Character)
+end
+
+local function onCameraChanged()
+    if workspace.CurrentCamera then
+        workspace.CurrentCamera.ChildAdded:Connect(updateCache)
+    end
+end
+workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(onCameraChanged)
+onCameraChanged()
